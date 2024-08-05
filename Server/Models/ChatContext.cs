@@ -14,7 +14,7 @@ namespace Server.Models
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.LogTo(Console.WriteLine)
+            optionsBuilder
                 .UseMySql("server=localhost;user=root;password=password;database=Chatdb;", new MySqlServerVersion(new Version(8, 0, 36)));
         }
         protected override void OnModelCreating(ModelBuilder modelBuilder)

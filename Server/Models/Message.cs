@@ -23,7 +23,7 @@ namespace Server.Models
     {
         [NotMapped]
         public Command Command { get; set; }
-        public int Id { get; set; }
+        public int? Id { get; set; }
         public string? Text { get; set; }
         public DateTime TimeMessage { get; set; }
         public bool ReceivedStatus { get; set; } = false;

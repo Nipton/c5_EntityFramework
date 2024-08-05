@@ -20,22 +20,22 @@ namespace Server
             server = new UdpClient(5000);
         }
 
-        public async Task LoginAsync(string name, IPEndPoint iPEndPoint)
+        public async Task LoginAsync(User user, IPEndPoint iPEndPoint)
         {
-            clients[name] = iPEndPoint;
+            clients[user.Name] = iPEndPoint;
 
             using (ChatContext chatContext = new ChatContext())
             {
                 try
                 {
-                    if (chatContext.Users.FirstOrDefault(x => x.Name == name) == null)
+                    if (chatContext.Users.FirstOrDefault(x => x.Name == user.Name) == null)
                     {
-                        await chatContext.AddAsync(new User(name));
+                        await chatContext.Users.AddAsync(user);
                         await chatContext.SaveChangesAsync();
                     }
                     else
                     {
-                        await CheckUnreadMessagesAsync(name);
+                        await CheckUnreadMessagesAsync(user.Name);
                     }
                 }
                 catch (Exception ex)
@@ -71,7 +71,7 @@ namespace Server
             if (message.Command == Command.Login)
             {
                 if (message.FromUser != null)
-                    await LoginAsync(message.FromUser.Name, remoteEndPoint);
+                    await LoginAsync(message.FromUser, remoteEndPoint);
             }
             else if (message.Command == Command.Message)
             {
@@ -87,19 +87,30 @@ namespace Server
             using (ChatContext chatContext = new ChatContext())
             {
                 bool statusSend = false;               
-                if(message.ToUser == null)
+                if(message.ToUser == null || message.FromUser == null)
                     return statusSend;
                 var toUser = chatContext.Users.FirstOrDefault(x => x.Name == message.ToUser.Name);
-                if (toUser != null)
+                var fromUser = chatContext.Users.FirstOrDefault(x => x.Name == message.FromUser!.Name);
+                if (toUser != null && fromUser != null)
                 {
                     IPEndPoint newiPEndPoint;
-                    toUser.MessagesToReceive.Add(message);
+                    Message newMessage; //= new Message { Id = message.Id, FromUser =  fromUser, ToUser = toUser, Text = message.Text, TimeMessage = message.TimeMessage };
                     try
                     {
+                        if(chatContext.Messages.Any(x => x.Id == message.Id))
+                        {
+                            newMessage = chatContext.Messages.Find(message.Id)!;
+                        }
+                        else
+                        {
+                            newMessage = new Message { Id = message.Id, FromUser = fromUser, ToUser = toUser, Text = message.Text, TimeMessage = message.TimeMessage };
+                            chatContext.Messages.Add(newMessage);
+                        }                      
                         await chatContext.SaveChangesAsync();
+                        
                         if(clients.TryGetValue(message.ToUser.Name, out newiPEndPoint!))
                         {
-                            var data = Encoding.UTF8.GetBytes(message.ToJson());
+                            var data = Encoding.UTF8.GetBytes(newMessage.ToJson());
                             await server.SendAsync(data, newiPEndPoint);
                         }
                     }
@@ -139,13 +150,15 @@ namespace Server
             {
                 try
                 {
-                    User? user = chatContext.Users.Include(m => m.MessagesToReceive).FirstOrDefault(x => x.Name == name);
-                    if (user != null)
+                    User? user = await chatContext.Users.SingleOrDefaultAsync(u => u.Name == name);
+                    if (user == null)
+                        return;
+                    var unreadMessages = await chatContext.Messages.Where(m => m.ToUserId == user.Id && !m.ReceivedStatus).ToListAsync();
+
+                    foreach (var message in unreadMessages)
                     {
-                        foreach(var message in user.MessagesToReceive)
-                        {
-                            await SendMessageAsync(message);
-                        }
+                        message.FromUser = chatContext.Users.FirstOrDefault(user => user.Id == message.FromUserId);
+                        await SendMessageAsync(message);
                     }
                 }
                 catch (Exception ex)
