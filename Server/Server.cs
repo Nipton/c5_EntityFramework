@@ -7,17 +7,46 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Server
 {
+    interface IMessageSource
+    {
+        Task SendAsync(Message message, IPEndPoint ep);
+        Task<(Message?, IPEndPoint)> ReceiveAsync();
+    }
+    class UDPMessageSource : IMessageSource
+    {
+        UdpClient server;
+        public UDPMessageSource() 
+        {
+            server = new UdpClient(5000);
+        }
+        public async Task<(Message?, IPEndPoint)> ReceiveAsync()
+        {
+            var buffer = await server.ReceiveAsync();
+            var data = Encoding.UTF8.GetString(buffer.Buffer);
+            var tuple = (Message.FromJson(data), buffer.RemoteEndPoint);
+            return tuple;
+        }
+
+        public async Task SendAsync(Message message, IPEndPoint ep)
+        {
+            var data = Encoding.UTF8.GetBytes(message.ToJson());
+            await server.SendAsync(data, ep);
+        }
+    }
     internal class Server
     {
+        IMessageSource messageSource;
         Dictionary<string, IPEndPoint> clients;
-        UdpClient server;
-        public Server()
+        //UdpClient server;
+        public Server(IMessageSource source)
         {
+            messageSource = source;
             clients = new Dictionary<string, IPEndPoint>();
-            server = new UdpClient(5000);
+            //server = new UdpClient(5000);
         }
 
         public async Task LoginAsync(User user, IPEndPoint iPEndPoint)
@@ -51,12 +80,13 @@ namespace Server
             {
                 while (true)
                 {
-                    var buffer = await server.ReceiveAsync();
-                    var data = Encoding.UTF8.GetString(buffer.Buffer);
-                    Message? message = Message.FromJson(data);
+                    //var buffer = await server.ReceiveAsync();
+                    //var data = Encoding.UTF8.GetString(buffer.Buffer);
+                    //Message? message = Message.FromJson(data);
+                    var (message, remoteEndPoint) = await messageSource.ReceiveAsync();
                     if (message != null)
                     {
-                        await HandleMessageAsync(message, buffer.RemoteEndPoint);
+                        await HandleMessageAsync(message, remoteEndPoint);
                     }
                 }
             }
@@ -110,8 +140,9 @@ namespace Server
                         
                         if(clients.TryGetValue(message.ToUser.Name, out newiPEndPoint!))
                         {
-                            var data = Encoding.UTF8.GetBytes(newMessage.ToJson());
-                            await server.SendAsync(data, newiPEndPoint);
+                            //var data = Encoding.UTF8.GetBytes(newMessage.ToJson());
+                            //await server.SendAsync(data, newiPEndPoint);
+                            await messageSource.SendAsync(newMessage, newiPEndPoint);
                         }
                     }
                     catch (Exception ex)
