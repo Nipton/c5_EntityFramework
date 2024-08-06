@@ -1,4 +1,5 @@
-﻿namespace Client
+﻿using Server.Abstraction;
+namespace Client
 {
     internal class Program
     {
@@ -8,7 +9,8 @@
             string name = Console.ReadLine()!;
             Console.Write("Введите порт: ");
             int port = int.Parse(Console.ReadLine()!);
-            Client client = new Client(name, port);
+            IMessageSource messageSource = new UDPMessageSource(port);
+            Client client = new Client(name, messageSource);
             _ = Task.Run(client.ClientReceveAsync);
             await client.ClientSendAsync();
         }

@@ -6,19 +6,21 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using Server.Abstraction;
 
 namespace Client
 {
-    internal class Client
+    public class Client
     {
         readonly IPEndPoint remotePoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000);
-        //readonly Message message = new Message();
-        readonly UdpClient client;
+        readonly IMessageSource messageSource;
+        //readonly UdpClient client;
         string name;
         User fromUser;
-        public Client(string name, int port)
+        public Client(string name, IMessageSource messageSource)
         {
-            client = new UdpClient(port);
+            //client = new UdpClient(port);
+            this.messageSource = messageSource;
             this.name = name;
             fromUser = new User(name);
         }
@@ -29,9 +31,10 @@ namespace Client
             {
                 while (true)
                 {
-                    var receiveAnswer = await client.ReceiveAsync();
-                    string str = Encoding.UTF8.GetString(receiveAnswer.Buffer);
-                    var answer = Message.FromJson(str);
+                    //var receiveAnswer = await client.ReceiveAsync();
+                    //string str = Encoding.UTF8.GetString(receiveAnswer.Buffer);
+                    //var answer = Message.FromJson(str);
+                    var (answer, endpoint)  = await messageSource.ReceiveAsync();
                     if (answer != null)
                     {
                         Console.WriteLine(answer);
@@ -44,12 +47,12 @@ namespace Client
                 Console.WriteLine(ex.Message);
             }
         }
-        public async Task ConfirmAsync(Message message)
+        private async Task ConfirmAsync(Message message)
         {
             message.Command = Command.Confirmation;
             await SendMessage(message);
         }
-        public async Task Register()
+        private async Task Register()
         {
             Message message = new Message();
             message.FromUser = fromUser;
@@ -71,12 +74,13 @@ namespace Client
                 await SendMessage(message);
             }
         }
-        public async Task SendMessage(Message message)
+        private async Task SendMessage(Message message)
         {
             try
             {
-                var data = Encoding.UTF8.GetBytes(message.ToJson());
-                await client.SendAsync(data, remotePoint);
+                //var data = Encoding.UTF8.GetBytes(message.ToJson());
+                //await client.SendAsync(data, remotePoint);
+                await messageSource.SendAsync(message, remotePoint);
             }
             catch (Exception ex)
             {

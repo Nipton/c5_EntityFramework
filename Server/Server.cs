@@ -1,44 +1,18 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Server.Abstraction;
 using Server.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Server
 {
-    interface IMessageSource
+    public class Server
     {
-        Task SendAsync(Message message, IPEndPoint ep);
-        Task<(Message?, IPEndPoint)> ReceiveAsync();
-    }
-    class UDPMessageSource : IMessageSource
-    {
-        UdpClient server;
-        public UDPMessageSource() 
-        {
-            server = new UdpClient(5000);
-        }
-        public async Task<(Message?, IPEndPoint)> ReceiveAsync()
-        {
-            var buffer = await server.ReceiveAsync();
-            var data = Encoding.UTF8.GetString(buffer.Buffer);
-            var tuple = (Message.FromJson(data), buffer.RemoteEndPoint);
-            return tuple;
-        }
-
-        public async Task SendAsync(Message message, IPEndPoint ep)
-        {
-            var data = Encoding.UTF8.GetBytes(message.ToJson());
-            await server.SendAsync(data, ep);
-        }
-    }
-    internal class Server
-    {
+        private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
         IMessageSource messageSource;
         Dictionary<string, IPEndPoint> clients;
         //UdpClient server;
@@ -48,7 +22,10 @@ namespace Server
             clients = new Dictionary<string, IPEndPoint>();
             //server = new UdpClient(5000);
         }
-
+        public Task Start()
+        {
+            return Task.Run(async () => await RunServerAsync(_cancellationTokenSource.Token), _cancellationTokenSource.Token);
+        }
         public async Task LoginAsync(User user, IPEndPoint iPEndPoint)
         {
             clients[user.Name] = iPEndPoint;
@@ -73,12 +50,12 @@ namespace Server
                 }
             }
         }
-        public async Task RunServerAsync()
+        public async Task RunServerAsync(CancellationToken cancellationToken)
         {
             Console.WriteLine("Сервер запущен.");
             try
             {
-                while (true)
+                while (!cancellationToken.IsCancellationRequested)
                 {
                     //var buffer = await server.ReceiveAsync();
                     //var data = Encoding.UTF8.GetString(buffer.Buffer);
@@ -197,6 +174,11 @@ namespace Server
                     Console.WriteLine(ex.ToString());
                 }
             }
+        }
+        public void Stop()
+        {
+            _cancellationTokenSource.Cancel();
+            Console.WriteLine("Сервер остановлен.");
         }
     }
 }
